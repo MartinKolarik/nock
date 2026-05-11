@@ -14,7 +14,6 @@
 const http = require('http')
 const { expect } = require('chai')
 const sinon = require('sinon')
-const semver = require('semver')
 const nock = require('..')
 
 const common = require('../lib/common')
@@ -28,7 +27,7 @@ describe('Body Match', () => {
       const result = matchBody(
         {},
         'something //here is something more \n',
-        'something //here is something more \n\r'
+        'something //here is something more \n\r',
       )
       expect(result).to.equal(true)
     })
@@ -45,7 +44,7 @@ describe('Body Match', () => {
       const result = matchBody(
         { headers: { 'Content-Type': ['multipart/form-data;'] } },
         {},
-        'test'
+        'test',
       )
       expect(result).to.equal(false)
     })
@@ -54,7 +53,7 @@ describe('Body Match', () => {
       const result = matchBody(
         { headers: { 'Content-Type': 'multipart/form-data;' } },
         'something //here is something more \nHello',
-        'something //here is something more \nHello'
+        'something //here is something more \nHello',
       )
       expect(result).to.equal(true)
     })
@@ -63,7 +62,7 @@ describe('Body Match', () => {
       const result = matchBody(
         { headers: { 'Content-Type': ['multipart/form-data;'] } },
         'something //here is something more \nHello',
-        'something //here is something more \nHello'
+        'something //here is something more \nHello',
       )
       expect(result).to.equal(true)
     })
@@ -71,6 +70,18 @@ describe('Body Match', () => {
     it('should use strict equality for deep comparisons', () => {
       const result = matchBody({}, { number: 1 }, '{"number": "1"}')
       expect(result).to.equal(false)
+    })
+
+    it('should not modify the original spec object', () => {
+      const spec = { number: 1 }
+      matchBody(
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+        spec,
+        '',
+      )
+      expect(spec).to.deep.equal({ number: 1 })
     })
   })
 })
@@ -125,24 +136,24 @@ describe('`normalizeRequestOptions()`', () => {
 describe('`isUtf8Representable()`', () => {
   it("should return false for buffers that aren't utf8 representable", () => {
     expect(common.isUtf8Representable(Buffer.from('8001', 'hex'))).to.equal(
-      false
+      false,
     )
   })
 
   it('should returns true for buffers containing strings', () => {
     expect(common.isUtf8Representable(Buffer.from('8001', 'utf8'))).to.equal(
-      true
+      true,
     )
   })
 })
 
 it('`isJSONContent()`', () => {
   expect(common.isJSONContent({ 'content-type': 'application/json' })).to.equal(
-    true
+    true,
   )
 
   expect(
-    common.isJSONContent({ 'content-type': 'application/json; charset=utf-8' })
+    common.isJSONContent({ 'content-type': 'application/json; charset=utf-8' }),
   ).to.equal(true)
 
   expect(common.isJSONContent({ 'content-type': 'text/plain' })).to.equal(false)
@@ -155,7 +166,7 @@ describe('`headersFieldNamesToLowerCase()`', () => {
       'Content-typE': 'plain/text',
     }
     const inputClone = { ...input }
-    const result = common.headersFieldNamesToLowerCase(input)
+    const result = common.headersFieldNamesToLowerCase(input, true)
     const expected = {
       host: 'example.test',
       'content-type': 'plain/text',
@@ -167,12 +178,15 @@ describe('`headersFieldNamesToLowerCase()`', () => {
 
   it('throws on conflicting keys', () => {
     expect(() =>
-      common.headersFieldNamesToLowerCase({
-        HoSt: 'example.test',
-        HOST: 'example.test',
-      })
+      common.headersFieldNamesToLowerCase(
+        {
+          HoSt: 'example.test',
+          HOST: 'example.test',
+        },
+        true,
+      ),
     ).to.throw(
-      'Failed to convert header keys to lower case due to field name conflict: host'
+      'Failed to convert header keys to lower case due to field name conflict: host',
     )
   })
 })
@@ -237,13 +251,13 @@ describe('`deleteHeadersField()`', () => {
 
   it('should throw for invalid headers', () => {
     expect(() => common.deleteHeadersField('foo', 'Content-Type')).to.throw(
-      'headers must be an object'
+      'headers must be an object',
     )
   })
 
   it('should throw for invalid field name', () => {
     expect(() => common.deleteHeadersField({}, /cookie/)).to.throw(
-      'field name must be a string'
+      'field name must be a string',
     )
   })
 })
@@ -283,26 +297,6 @@ describe('`matchStringOrRegexp()`', () => {
     const result = common.matchStringOrRegexp('to match', /not/)
     expect(result).to.equal(false)
   })
-})
-
-describe('`overrideRequests()`', () => {
-  afterEach(() => {
-    common.restoreOverriddenRequests()
-  })
-
-  it('should throw if called a second time', () => {
-    nock.restore()
-    common.overrideRequests()
-    // Second call throws.
-    expect(() => common.overrideRequests()).to.throw(
-      "Module's request already overridden for http protocol."
-    )
-  })
-})
-
-it('`restoreOverriddenRequests()` can be called more than once', () => {
-  common.restoreOverriddenRequests()
-  common.restoreOverriddenRequests()
 })
 
 describe('`stringifyRequest()`', () => {
@@ -463,7 +457,7 @@ it('`headersArrayToObject()`', () => {
   })
 
   expect(() => common.headersArrayToObject(123)).to.throw(
-    'Expected a header array'
+    'Expected a header array',
   )
 })
 
@@ -474,8 +468,9 @@ it('`percentEncode()` encodes extra reserved characters', () => {
 describe('`normalizeClientRequestArgs()`', () => {
   it('should throw for invalid URL', () => {
     // See https://github.com/nodejs/node/pull/38614 release in node v16.2.0
-    const isNewErrorText = semver.gte(process.versions.node, '16.2.0')
-    const errorText = isNewErrorText ? 'Invalid URL' : 'example.test'
+    const [major, minor] = process.versions.node.split('.').map(Number)
+    const useNewErrorText = major > 16 || (major === 16 && minor > 1)
+    const errorText = useNewErrorText ? 'Invalid URL' : 'example.test'
 
     // no schema
     expect(() => http.get('example.test')).to.throw(TypeError, errorText)
@@ -515,7 +510,7 @@ describe('`dataEqual()`', () => {
   it('treats JSON path notated and nested objects as equal', () => {
     const result = common.dataEqual(
       { 'foo[bar][0]': 'baz' },
-      { foo: { bar: ['baz'] } }
+      { foo: { bar: ['baz'] } },
     )
     expect(result).to.equal(true)
   })
@@ -527,18 +522,115 @@ describe('`dataEqual()`', () => {
 
 it('testing timers are deleted correctly', done => {
   const timeoutSpy = sinon.spy()
-  const intervalSpy = sinon.spy()
   const immediateSpy = sinon.spy()
 
   common.setTimeout(timeoutSpy, 0)
-  common.setInterval(intervalSpy, 0)
   common.setImmediate(immediateSpy)
   common.removeAllTimers()
 
   setImmediate(() => {
     expect(timeoutSpy).to.not.have.been.called()
-    expect(intervalSpy).to.not.have.been.called()
     expect(immediateSpy).to.not.have.been.called()
     done()
+  })
+})
+
+describe('`isPlainObject()`', () => {
+  const { isPlainObject } = common
+
+  it('custom Object', () => {
+    function Foo() {
+      this.a = 1
+    }
+    expect(isPlainObject(new Foo()), false)
+  })
+
+  it('Array', () => {
+    expect(isPlainObject([1, 2, 3]), false)
+  })
+
+  it('Date', () => {
+    expect(isPlainObject(new Date()), false)
+  })
+
+  it('RegExp', () => {
+    expect(isPlainObject(/a/), false)
+  })
+
+  it('plain Object', () => {
+    expect(isPlainObject({}), true)
+  })
+
+  it('null', () => {
+    expect(isPlainObject(null), true)
+  })
+
+  it('null-Object /1', () => {
+    expect(isPlainObject({ __proto__: null }), true)
+  })
+
+  it('null-Object /2', () => {
+    expect(isPlainObject(Object.create(null)), true)
+  })
+})
+
+describe('`expand()`', () => {
+  const { expand } = common
+
+  it('undefined', () => {
+    expect(expand(undefined), undefined)
+  })
+
+  it('null', () => {
+    expect(expand(null), null)
+  })
+
+  it('throws on constructor', () => {
+    expect(expand({ constructor: 4 })).equal(undefined)
+  })
+
+  it('pure key values', () => {
+    expect(expand({ a: 4 })).deep.equal({ a: 4 })
+  })
+
+  it('nested object', () => {
+    expect(expand({ 'a.b': 4 })).deep.equal({ a: { b: 4 } })
+  })
+
+  it('nested object', () => {
+    expect(expand({ 'a.b': 4, 'a.c': 5 })).deep.equal({ a: { b: 4, c: 5 } })
+  })
+
+  it('nested object', () => {
+    expect(expand({ 'a.b': 4, 'b.a': 5 })).deep.equal({
+      a: { b: 4 },
+      b: { a: 5 },
+    })
+  })
+
+  it('nested array', () => {
+    expect(expand({ 'a.0': 4, 'a.1': 5 })).deep.equal({ a: [4, 5] })
+  })
+
+  it('array-like', () => {
+    expect(expand({ 'a[0]': 4, 'a[1]': 5 })).deep.equal({ a: [4, 5] })
+  })
+
+  it('example', () => {
+    expect(expand({ 'foo[bar][0]': 'baz' })).deep.equal({
+      foo: { bar: ['baz'] },
+    })
+  })
+
+  it('does not mutate original', () => {
+    const original = { 'foo[bar][0]': 'baz' }
+    const result = expand(original)
+    expect(result).deep.equal({ foo: { bar: ['baz'] } })
+    expect(original).deep.equal({ 'foo[bar][0]': 'baz' })
+    expect(original).not.equal(result)
+  })
+
+  it('returns undefined when a key conflicts with an already-set primitive value', () => {
+    expect(expand({ parent: 'value', 'parent.1': 'first' })).equal(undefined)
   })
 })
